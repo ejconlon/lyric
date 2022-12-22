@@ -1,17 +1,17 @@
 name:                lyric
 version:             0.1.0
-github:              "githubuser/lyric"
+github:              "ejconlon/lyric"
 license:             BSD3
-author:              "Author name here"
-maintainer:          "example@example.com"
-copyright:           "(c) 2022 Author name here"
+author:              "Eric Conlon"
+maintainer:          "ejconlon@gmail.com"
+copyright:           "(c) 2022 Eric Conlon"
 # category:            Undefined
 # synopsis:            Undefined
 
 extra-source-files:
 - README.md
 
-description: Please see the README on GitHub at <https://github.com/githubuser/lyric#readme>
+description: Please see the README on GitHub at <https://github.com/ejconlon/lyric#readme>
 
 dependencies:
 - base >= 4.12 && < 5
