@@ -3,5 +3,8 @@ resolver: lts-20.4
 ghc-options:
   "$everything": -haddock
 
+extra-deps:
+- int-like-0.1.1
+
 packages:
 - .
