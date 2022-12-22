@@ -1,0 +1,81 @@
+name:                lyric
+version:             0.1.0
+github:              "githubuser/lyric"
+license:             BSD3
+author:              "Author name here"
+maintainer:          "example@example.com"
+copyright:           "(c) 2022 Author name here"
+# category:            Undefined
+# synopsis:            Undefined
+
+extra-source-files:
+- README.md
+
+description: Please see the README on GitHub at <https://github.com/githubuser/lyric#readme>
+
+dependencies:
+- base >= 4.12 && < 5
+
+default-extensions:
+- BangPatterns
+- ConstraintKinds
+- DeriveFunctor
+- DeriveFoldable
+- DeriveGeneric
+- DeriveTraversable
+- DerivingStrategies
+- DerivingVia
+- FlexibleContexts
+- FlexibleInstances
+- FunctionalDependencies
+- GADTs
+- GeneralizedNewtypeDeriving
+- LambdaCase
+- KindSignatures
+- MultiParamTypeClasses
+- Rank2Types
+- ScopedTypeVariables
+- StandaloneDeriving
+- TupleSections
+- TypeApplications
+- TypeOperators
+- TypeFamilies
+
+ghc-options:
+- -Wall
+- -Wcompat
+- -Widentities
+- -Wincomplete-record-updates
+- -Wincomplete-uni-patterns
+- -Wpartial-fields
+- -Wredundant-constraints
+- -fno-warn-unused-top-binds
+- -fwrite-ide-info
+- -hiedir=.hie
+
+library:
+  source-dirs: src
+
+executables:
+  lyric-exe:
+    main:                Main.hs
+    source-dirs:         exe
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - lyric
+
+tests:
+  lyric-test:
+    main:                Main.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - lyric
+    - tasty
+    - tasty-hunit
