@@ -3,8 +3,8 @@
 module Lyric where
 
 import Control.Exception (Exception)
-import Control.Monad.Except (ExceptT, MonadError, runExceptT)
-import Control.Monad.State.Strict (MonadState, State, gets, runState)
+import Control.Monad.Except (ExceptT, MonadError (..), runExceptT)
+import Control.Monad.State.Strict (MonadState, State, gets, runState, modify')
 import Data.Functor.Foldable.TH (makeBaseFunctor)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -46,7 +46,9 @@ deriving instance Eq r => Eq (ExpF r)
 deriving instance Ord r => Ord (ExpF r)
 deriving instance Show r => Show (ExpF r)
 
-data Err = ErrFoo
+data Err =
+    ErrStepKontNonValue
+  | ErrTodo
   deriving stock (Eq, Ord, Show)
 
 instance Exception Err
@@ -55,23 +57,59 @@ newtype TmUniq = TmUniq { unTmUniq :: Int }
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num)
 
-type VarEnv = Map TmVar TmUniq
+type Heap = Map TmUniq Val
 
-type VarUnion = UnionMap TmUniq Val
+initHeap :: Heap
+initHeap = Map.empty
 
-data Kont = KontTop
+type Ctx = Map TmVar TmUniq
+
+initCtx :: Ctx
+initCtx = Map.empty
+
+type Union = UnionMap TmUniq Val
+
+initUnion :: Union
+initUnion = UM.empty
+
+data Kont =
+    KontTop
+  | KontOne !(Seq Exp) Kont
+  | KontAll !(Seq Val) !(Seq Exp) Kont
   deriving stock (Eq, Ord, Show)
+
+makeBaseFunctor ''Kont
+deriving instance Eq r => Eq (KontF r)
+deriving instance Ord r => Ord (KontF r)
+deriving instance Show r => Show (KontF r)
+
+data Frame = Frame
+  { frCtx :: !Ctx
+  , frUnion :: !Union
+  , frParent :: !Stack
+  } deriving stock (Eq, Show)
+
+initFrame :: Frame
+initFrame = Frame initCtx initUnion initStack
+
+newtype Stack = Stack { unStack :: KontF Frame }
+  deriving stock (Show)
+  deriving newtype (Eq)
+
+initStack :: Stack
+initStack = Stack KontTopF
 
 data St = St
   { stUniq :: !TmUniq
   , stFocus :: !Exp
-  , stVarEnv :: !VarEnv
-  , stVarUnion :: !VarUnion
-  , stKont :: !Kont
+  , stHeap :: !Heap
+  , stCtx :: !Ctx
+  , stUnion :: !Union
+  , stStack :: !Stack
   } deriving stock (Eq, Show)
 
 initSt :: Exp -> St
-initSt focus = St 0 focus Map.empty UM.empty KontTop
+initSt focus = St 0 focus initHeap initCtx initUnion initStack
 
 newtype M a = M { unM :: ExceptT Err (State St) a }
   deriving newtype (Functor, Applicative, Monad, MonadError Err, MonadState St)
@@ -79,37 +117,72 @@ newtype M a = M { unM :: ExceptT Err (State St) a }
 runM :: M a -> St -> (Either Err a, St)
 runM = runState . runExceptT . unM
 
-data Res = ResCont | ResDone
+data FocusRes =
+    FocusResRet
+  | FocusResCont
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
-stepFocus :: M (Maybe Res)
+data KontRes =
+    KontResCont
+  | KontResDone
+  deriving stock (Eq, Ord, Show, Enum, Bounded)
+
+stepFocus :: M FocusRes
 stepFocus = do
   focus <- gets stFocus
   case focus of
-    -- TODO
-    _ -> pure Nothing
+    ExpVal _ -> pure FocusResRet
+    ExpFail -> pure FocusResRet
+    _ -> throwError ErrTodo
 
-stepKont :: M (Maybe Res)
+readVal :: M (Maybe Val)
+readVal = do
+  focus <- gets stFocus
+  case focus of
+    ExpVal v -> pure (Just v)
+    ExpFail -> pure Nothing
+    _ -> throwError ErrStepKontNonValue
+
+stepKont :: M KontRes
 stepKont = do
-  kont <- gets stKont
-  case kont of
-    -- TODO
-    _ -> pure Nothing
+  Stack kontf <- gets stStack
+  case kontf of
+    KontTopF -> pure KontResDone
+    KontOneF es fr -> do
+      mv <- readVal
+      error "TODO"
+      -- case mv of
+      --   Nothing ->
+      --     case es of
+      --       Empty ->
+      --         error "TODO"
+      --       e :<| es' -> do
+      --         error "TODO"
+      -- pure KontResCont
+    KontAllF vs es fr -> do
+      error "TODO"
+      -- let vs' = vs :|> v
+      -- case es of
+      --   Empty -> do
+      --     -- let e = ExpVal (ValTup (fmap ExpVal vs'))
+      --     -- modify' (\st -> st { stFocus = e, stKont = k })
+      --     error "TODO"
+      --   e :<| es' -> do
+      --     -- let k' = KontAll vs' es' k
+      --     -- modify' (\st -> st { stFocus = e, stKont = k' })
+      --     error "TODO"
+      -- pure KontResCont
 
-step :: M Res
+step :: M KontRes
 step = do
   resFocus <- stepFocus
   case resFocus of
-    Nothing -> do
-      resKont <- stepKont
-      case resKont of
-        Nothing -> pure ResDone
-        Just res -> pure res
-    Just res -> pure res
+    FocusResCont -> pure KontResCont
+    FocusResRet -> stepKont
 
 multiStep :: M ()
 multiStep = do
   res <- step
   case res of
-    ResCont -> multiStep
-    ResDone -> pure ()
+    KontResCont -> multiStep
+    KontResDone -> pure ()
