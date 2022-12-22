@@ -56,42 +56,10 @@ library
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints -fno-warn-unused-top-binds -fwrite-ide-info -hiedir=.hie
   build-depends:
       base >=4.12 && <5
-  default-language: Haskell2010
-
-executable lyric-exe
-  main-is: Main.hs
-  other-modules:
-      Paths_lyric
-  hs-source-dirs:
-      exe
-  default-extensions:
-      BangPatterns
-      ConstraintKinds
-      DeriveFunctor
-      DeriveFoldable
-      DeriveGeneric
-      DeriveTraversable
-      DerivingStrategies
-      DerivingVia
-      FlexibleContexts
-      FlexibleInstances
-      FunctionalDependencies
-      GADTs
-      GeneralizedNewtypeDeriving
-      LambdaCase
-      KindSignatures
-      MultiParamTypeClasses
-      Rank2Types
-      ScopedTypeVariables
-      StandaloneDeriving
-      TupleSections
-      TypeApplications
-      TypeOperators
-      TypeFamilies
-  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints -fno-warn-unused-top-binds -fwrite-ide-info -hiedir=.hie -threaded -rtsopts -with-rtsopts=-N
-  build-depends:
-      base >=4.12 && <5
-    , lyric
+    , containers
+    , mtl
+    , recursion-schemes
+    , text
   default-language: Haskell2010
 
 test-suite lyric-test
@@ -128,7 +96,11 @@ test-suite lyric-test
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints -fno-warn-unused-top-binds -fwrite-ide-info -hiedir=.hie -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.12 && <5
+    , containers
     , lyric
+    , mtl
+    , recursion-schemes
     , tasty
     , tasty-hunit
+    , text
   default-language: Haskell2010

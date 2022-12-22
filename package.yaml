@@ -15,6 +15,10 @@ description: Please see the README on GitHub at <https://github.com/ejconlon/lyr
 
 dependencies:
 - base >= 4.12 && < 5
+- containers
+- mtl
+- recursion-schemes
+- text
 
 default-extensions:
 - BangPatterns
@@ -56,16 +60,16 @@ ghc-options:
 library:
   source-dirs: src
 
-executables:
-  lyric-exe:
-    main:                Main.hs
-    source-dirs:         exe
-    ghc-options:
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
-    dependencies:
-    - lyric
+# executables:
+#   lyric-exe:
+#     main:                Main.hs
+#     source-dirs:         exe
+#     ghc-options:
+#     - -threaded
+#     - -rtsopts
+#     - -with-rtsopts=-N
+#     dependencies:
+#     - lyric
 
 tests:
   lyric-test:
