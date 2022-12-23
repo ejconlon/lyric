@@ -25,6 +25,7 @@ source-repository head
 library
   exposed-modules:
       Lyric
+      Lyric.Lenses
       Lyric.UnionFind
       Lyric.UnionMap
   other-modules:
@@ -60,6 +61,7 @@ library
       base >=4.12 && <5
     , containers
     , int-like
+    , lens
     , mtl
     , recursion-schemes
     , text
@@ -101,6 +103,7 @@ test-suite lyric-test
       base >=4.12 && <5
     , containers
     , int-like
+    , lens
     , lyric
     , mtl
     , recursion-schemes

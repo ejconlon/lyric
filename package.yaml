@@ -17,6 +17,7 @@ dependencies:
 - base >= 4.12 && < 5
 - containers
 - int-like
+- lens
 - mtl
 - recursion-schemes
 - text
