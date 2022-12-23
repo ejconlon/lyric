@@ -1,178 +1,15 @@
-{-# LANGUAGE TemplateHaskell #-}
-
 module Lyric where
 
-import Control.Exception (Exception)
-import Control.Lens (Lens')
-import Control.Lens.TH (makeLensesFor)
 import Control.Monad.Except (ExceptT, MonadError (..), runExceptT)
 import Control.Monad.Reader (MonadReader (..), ReaderT (..))
-import Control.Monad.State.Strict (MonadState, State, gets, modify', runState)
-import Data.Functor.Foldable.TH (makeBaseFunctor)
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
+import Control.Monad.State.Strict (MonadState (..), State, gets, modify', runState)
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
-import Data.String (IsString (..))
-import Data.Text (Text)
+import Lyric.Core (CtlKont (..), Env, Err (..), Exp (..), Focus (..), MergeErr (..), Op (..), RedKont (..), RetVal (..),
+                   St (..), TmUniq (..), Trail (..), TrailErr (..), Union, Val (..), ctlRedKont, initSt, stUnionL)
 import Lyric.Lenses (runStateLens)
 import Lyric.UnionFind (MergeRes (..))
-import Lyric.UnionMap (UnionMap)
 import qualified Lyric.UnionMap as UM
-
-newtype Index = Index { unTmIndex :: Int }
-  deriving stock (Show)
-  deriving newtype (Eq, Ord, Num)
-
-newtype TmUniq = TmUniq { unTmUniq :: Int }
-  deriving stock (Show)
-  deriving newtype (Eq, Ord, Num)
-
-newtype TmVar = TmVar { unTmVar :: Text }
-  deriving stock (Show)
-  deriving newtype (Eq, Ord, IsString)
-
-data Op = OpGt | OpAdd
-  deriving stock (Eq, Ord, Show, Enum, Bounded)
-
-data Exp =
-    ExpVar !TmVar
-  | ExpTup !(Seq Exp)
-  | ExpLam !TmVar !Exp
-  | ExpInt !Int
-  | ExpOp !Op
-  | ExpApp Exp Exp
-  | ExpSeq Exp Exp
-  | ExpExists !TmVar Exp
-  | ExpFail
-  | ExpAlt Exp Exp
-  | ExpOne Exp
-  | ExpAll Exp
-  | ExpUnify !TmVar Exp
-  | ExpLet !TmVar Exp Exp
-  deriving stock (Eq, Ord, Show)
-
-instance IsString Exp where
-  fromString = ExpVar . fromString
-
-makeBaseFunctor ''Exp
-deriving instance Eq r => Eq (ExpF r)
-deriving instance Ord r => Ord (ExpF r)
-deriving instance Show r => Show (ExpF r)
-
-type Ctx = Map TmVar TmUniq
-
-initCtx :: Ctx
-initCtx = Map.empty
-
-data Val =
-    ValVar !TmUniq
-  | ValTup !(Seq Val)
-  | ValLam !Ctx !TmVar !Exp
-  | ValInt !Int
-  | ValOp !Op
-  deriving stock (Eq, Ord, Show)
-
--- valCtx :: Val -> Ctx
--- valCtx = \case
---   ValLam ctx _ _ -> ctx
---   _ -> Map.empty
-
--- type Trim = IntLikeSet TmUniq
-
--- data Slot = Slot
---   { slotTrim :: !Trim
---   , slotVal :: !Val
---   } deriving stock (Eq, Show)
-
-type Union = UnionMap TmUniq Val
-
-initUnion :: Union
-initUnion = UM.empty
-
-data MergeErr =
-    MergeErrTupLen !Int !Int
-  | MergeErrLam
-  | MergeErrInt !Int !Int
-  | MergeErrOp !Op !Op
-  | MergeErrMismatch
-  deriving stock (Eq, Ord, Show)
-
-instance Exception MergeErr
-
-data Trail =
-    TrailStart !TmUniq !TmUniq
-  | TrailTup !Int !Trail
-  deriving stock (Eq, Ord, Show)
-
-data TrailErr = TrailErr !Trail !MergeErr
-  deriving stock (Eq, Ord, Show)
-
-instance Exception TrailErr
-
-data Err =
-    ErrMerge !TrailErr
-  | ErrMissing !TmUniq
-  | ErrTodo
-  deriving stock (Eq, Ord, Show)
-
-instance Exception Err
-
-data Env = Env
-  { envCtx :: !Ctx
-  , envUnion :: !Union
-  } deriving stock (Eq, Show)
-
-makeLensesFor [("envUnion", "envUnionL")] ''Env
-
-initEnv :: Env
-initEnv = Env initCtx initUnion
-
-data Kont =
-    KontTop
-  | KontOne !(Seq Exp) !Env Kont
-  | KontAll !(Seq Val) !(Seq Exp) !Env Kont
-  deriving stock (Eq, Show)
-
-makeBaseFunctor ''Kont
-deriving instance Eq r => Eq (KontF r)
-deriving instance Show r => Show (KontF r)
-
--- data Frame = Frame
---   { frCtx :: !Ctx
---   , frUnion :: !Union
---   , frParent :: !Stack
---   } deriving stock (Eq, Show)
-
--- initFrame :: Frame
--- initFrame = Frame initCtx initUnion initStack
-
--- newtype Stack = Stack { unStack :: KontF Frame }
---   deriving stock (Show)
---   deriving newtype (Eq)
-
--- initStack :: Stack
--- initStack = Stack KontTopF
-
-data Focus =
-    FocusRed !Exp
-  | FocusRet !(Maybe Val)
-  deriving stock (Eq, Ord, Show)
-
-data St = St
-  { stUniq :: !TmUniq
-  , stFocus :: !Focus
-  , stEnv :: !Env
-  , stKont :: !Kont
-  } deriving stock (Eq, Show)
-
-makeLensesFor [("stEnv", "stEnvL")] ''St
-
-stUnionL :: Lens' St Union
-stUnionL = stEnvL . envUnionL
-
-initSt :: Exp -> St
-initSt e = St 0 (FocusRed e) initEnv KontTop
 
 newtype M a = M { unM :: ExceptT Err (State St) a }
   deriving newtype (Functor, Applicative, Monad, MonadError Err, MonadState St)
@@ -186,8 +23,21 @@ setFocus e = modify' (\st -> st { stFocus = e })
 setEnv :: Env -> M ()
 setEnv env = modify' (\st -> st { stEnv = env })
 
-setKont :: Kont -> M ()
-setKont k = modify' (\st -> st { stKont = k })
+setCtlKont :: CtlKont -> M ()
+setCtlKont k = modify' (\st -> st { stCtlKont = k })
+
+-- getRedKont :: M RedKont
+-- getRedKont = do
+--   j <- gets stCtlKont
+
+modifyRedKont :: (RedKont -> RedKont) -> M ()
+modifyRedKont f = modify' $ \st ->
+  st { stCtlKont =
+    case stCtlKont st of
+      CtlKontTop -> CtlKontOne (f RedKontTop) CtlKontTop
+      CtlKontOne k j -> CtlKontOne (f k) j
+      CtlKontAll vs k j -> CtlKontAll vs (f k) j
+  }
 
 data StepRes =
     StepResCont
@@ -197,50 +47,67 @@ data StepRes =
 stepFocus :: Exp -> M ()
 stepFocus = \case
     ExpFail -> do
-      setFocus (FocusRet Nothing)
+      setFocus (FocusRet RetValFail)
+    ExpAlt a b -> do
+      setFocus (FocusRed a)
+      ienv <- gets stEnv
+      modifyRedKont (RedKontAlt ienv b)
     ExpInt k -> do
-      setFocus (FocusRet (Just (ValInt k)))
+      setFocus (FocusRet (RetValPure (ValInt k)))
+    ExpApp a b -> do
+      setFocus (FocusRed a)
+      modifyRedKont (RedKontAppFirst b)
+    ExpOp o ->
+      setFocus (FocusRet (RetValPure (ValOp o)))
     _ -> throwError ErrTodo
 
-stepKont :: Maybe Val -> M StepRes
-stepKont mv = do
-  kont <- gets stKont
-  case kont of
-    KontTop -> pure StepResDone
-    KontOne es ienv k -> do
-      case mv of
-        Nothing ->
-          case es of
-            Empty -> do
-              setEnv ienv
-              setKont k
-            e :<| es' -> do
-              setFocus (FocusRed e)
-              setEnv ienv
-              setKont (KontOne es' ienv k)
-        Just _ -> do
-          setKont k
-      pure StepResCont
-    KontAll vs es ienv k -> do
-      let vs' = maybe vs (vs :|>) mv
-      case es of
-        Empty -> do
-          -- let e = ExpVal (ValTup (fmap ExpVal vs'))
-          -- setFocus e
-          error "TODO"
-        e :<| es' -> do
-          error "TODO"
-      --     -- let k' = KontAll vs' es' k
-      --     -- modify' (\st -> st { stFocus = e, stKont = k' })
-      --     error "TODO"
-      pure StepResCont
+stepRet :: RetVal -> M ()
+stepRet rv = do
+  ctlKont <- gets stCtlKont
+  let redKont = ctlRedKont ctlKont
+  case redKont of
+    RedKontTop -> do
+      setFocus (FocusCtl rv)
+    -- KontOne es ienv k -> do
+    --   case mv of
+    --     Nothing ->
+    --       case es of
+    --         Empty -> do
+    --           setEnv ienv
+    --           setKont k
+    --         e :<| es' -> do
+    --           setFocus (FocusRed e)
+    --           setEnv ienv
+    --           setKont (KontOne es' ienv k)
+    --     Just _ -> do
+    --       setKont k
+    --   pure StepResCont
+    -- KontAll vs es ienv k -> do
+    --   let vs' = maybe vs (vs :|>) mv
+    --   case es of
+    --     Empty -> do
+    --       -- let e = ExpVal (ValTup (fmap ExpVal vs'))
+    --       -- setFocus e
+    --       error "TODO"
+    --     e :<| es' -> do
+    --       error "TODO"
+    --   --     -- let k' = KontAll vs' es' k
+    --   --     -- modify' (\st -> st { stFocus = e, stKont = k' })
+    --   --     error "TODO"
+    --   pure StepResCont
+    -- RedKontAppFirst e k -> do
+    --   error "TODO"
+    -- RedKontAppSecond v k -> do
+    --   error "TODO"
+    _ -> throwError ErrTodo
 
 step :: M StepRes
 step = do
   focus <- gets stFocus
   case focus of
     FocusRed e -> StepResCont <$ stepFocus e
-    FocusRet mv -> stepKont mv
+    FocusRet rv -> error "TODO" -- stepRet rv
+    -- FocusAlt {} -> _
 
 multiStep :: M ()
 multiStep = do
@@ -267,12 +134,12 @@ throwMergeErr me = do
   t <- ask
   throwError (TrailErr t me)
 
-tupZip :: Seq Val -> Seq Val -> N (Seq Val)
-tupZip = go 0 where
+mergeSeq :: (Int -> Trail -> Trail) -> Seq Val -> Seq Val -> N (Seq Val)
+mergeSeq f = go 0 where
   go _ Empty _ = pure Empty
   go _ _ Empty = pure Empty
   go !i (a :<| as) (b :<| bs) = do
-    c <- local (TrailTup i) (mergeVal a b)
+    c <- local (f i) (mergeVal a b)
     cs <- go (i + 1) as bs
     pure (c :<| cs)
 
@@ -285,7 +152,7 @@ mergeVal x y =
       let xlen = Seq.length xvs
           ylen = Seq.length yvs
       if xlen == ylen
-        then fmap ValTup (tupZip xvs yvs)
+        then ValTup <$> mergeSeq TrailTup xvs yvs
         else throwMergeErr (MergeErrTupLen xlen ylen)
     (ValLam {}, ValLam {}) -> throwMergeErr MergeErrLam
     (ValInt xk, ValInt yk) ->
@@ -296,6 +163,7 @@ mergeVal x y =
       if xo == yo
         then pure x
         else throwMergeErr (MergeErrOp xo yo)
+    (ValPart {}, ValPart {}) -> throwMergeErr MergeErrPart
     _ -> throwMergeErr MergeErrMismatch
 
 mergeUniq :: TmUniq -> TmUniq -> M TmUniq
