@@ -46,7 +46,7 @@ data Exp =
   | ExpAlt Exp Exp
   | ExpOne Exp
   | ExpAll Exp
-  | ExpUnify !TmVar Exp
+  | ExpUnify Exp Exp
   | ExpLet !TmVar Exp Exp
   deriving stock (Eq, Ord, Show)
 
