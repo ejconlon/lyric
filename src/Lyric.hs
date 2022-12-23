@@ -13,7 +13,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
-import Data.String (IsString)
+import Data.String (IsString (..))
 import Data.Text (Text)
 import Lyric.Lenses (runStateLens)
 import Lyric.UnionFind (MergeRes (..))
@@ -49,7 +49,11 @@ data Exp =
   | ExpOne Exp
   | ExpAll Exp
   | ExpUnify !TmVar Exp
+  | ExpLet !TmVar Exp Exp
   deriving stock (Eq, Ord, Show)
+
+instance IsString Exp where
+  fromString = ExpVar . fromString
 
 makeBaseFunctor ''Exp
 deriving instance Eq r => Eq (ExpF r)
@@ -190,11 +194,12 @@ data StepRes =
   | StepResDone
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
-stepFocus :: Exp -> M StepRes
+stepFocus :: Exp -> M ()
 stepFocus = \case
     ExpFail -> do
       setFocus (FocusRet Nothing)
-      pure StepResCont
+    ExpInt k -> do
+      setFocus (FocusRet (Just (ValInt k)))
     _ -> throwError ErrTodo
 
 stepKont :: Maybe Val -> M StepRes
@@ -234,7 +239,7 @@ step :: M StepRes
 step = do
   focus <- gets stFocus
   case focus of
-    FocusRed e -> stepFocus e
+    FocusRed e -> StepResCont <$ stepFocus e
     FocusRet mv -> stepKont mv
 
 multiStep :: M ()
@@ -300,3 +305,24 @@ mergeUniq a b = do
     MergeResMissing x -> throwError (ErrMissing x)
     MergeResUnchanged x -> pure x
     MergeResChanged x _ -> pure x
+
+expApp :: Exp -> [Exp] -> Exp
+expApp a = \case
+  [] -> a
+  b:bs -> expApp (ExpApp a b) bs
+
+expAlts :: [Exp] -> Exp
+expAlts = \case
+  [] -> ExpFail
+  [b] -> b
+  b:bs -> ExpAlt b (expAlts bs)
+
+testExp :: Exp
+testExp = expApp (ExpOp OpAdd) [ExpInt 1, ExpInt 2]
+
+evalExp :: Exp -> Either (Err, St) Focus
+evalExp ex =
+  let (eu, st) = runM multiStep (initSt ex)
+  in case eu of
+    Left er -> Left (er, st)
+    Right _ -> Right (stFocus st)
