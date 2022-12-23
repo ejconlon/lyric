@@ -49,6 +49,7 @@ library
       GeneralizedNewtypeDeriving
       LambdaCase
       KindSignatures
+      MultiWayIf
       MultiParamTypeClasses
       Rank2Types
       ScopedTypeVariables
@@ -91,6 +92,7 @@ test-suite lyric-test
       GeneralizedNewtypeDeriving
       LambdaCase
       KindSignatures
+      MultiWayIf
       MultiParamTypeClasses
       Rank2Types
       ScopedTypeVariables

@@ -6,7 +6,7 @@ import Control.Monad.State.Strict (MonadState (..), State, gets, modify', runSta
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
 import Lyric.Core (CtlKont (..), Env, Err (..), Exp (..), Focus (..), MergeErr (..), Op (..), RedKont (..), RetVal (..),
-                   St (..), TmUniq (..), Trail (..), TrailErr (..), Union, Val (..), ctlRedKont, initSt, stUnionL)
+                   St (..), TmUniq (..), Trail (..), TrailErr (..), Union, Val (..), ctlRedKont, initSt, stUnionL, valArity)
 import Lyric.Lenses (runStateLens)
 import Lyric.UnionFind (MergeRes (..))
 import qualified Lyric.UnionMap as UM
@@ -17,6 +17,9 @@ newtype M a = M { unM :: ExceptT Err (State St) a }
 runM :: M a -> St -> (Either Err a, St)
 runM = runState . runExceptT . unM
 
+todo :: String -> M a
+todo = throwError . ErrTodo
+
 setFocus :: Focus -> M ()
 setFocus e = modify' (\st -> st { stFocus = e })
 
@@ -26,9 +29,8 @@ setEnv env = modify' (\st -> st { stEnv = env })
 setCtlKont :: CtlKont -> M ()
 setCtlKont k = modify' (\st -> st { stCtlKont = k })
 
--- getRedKont :: M RedKont
--- getRedKont = do
---   j <- gets stCtlKont
+setRedKont :: RedKont -> M ()
+setRedKont = modifyRedKont . const
 
 modifyRedKont :: (RedKont -> RedKont) -> M ()
 modifyRedKont f = modify' $ \st ->
@@ -59,15 +61,32 @@ stepFocus = \case
       modifyRedKont (RedKontAppFirst b)
     ExpOp o ->
       setFocus (FocusRet (RetValPure (ValOp o)))
-    _ -> throwError ErrTodo
+    _ -> todo "more focus cases"
 
 stepRet :: RetVal -> M ()
 stepRet rv = do
   ctlKont <- gets stCtlKont
-  let redKont = ctlRedKont ctlKont
-  case redKont of
-    RedKontTop -> do
-      setFocus (FocusCtl rv)
+  case rv of
+    RetValFail -> setFocus (FocusCtl rv)
+    RetValPure v -> do
+      let redKont = ctlRedKont ctlKont
+      case redKont of
+        RedKontTop -> setFocus (FocusCtl rv)
+        RedKontAlt {} -> todo "ret alt"
+        RedKontAppFirst e k -> do
+          let ar = valArity v
+          if ar >= 1
+            then do
+              setFocus (FocusRed e)
+              setRedKont (RedKontAppSecond ar v k)
+            else throwError ErrAppNonFun
+        RedKontAppSecond ar w k ->
+          if
+            | ar > 1 -> todo "apply partial"
+            | ar == 1 -> todo "apply fun"
+            | otherwise -> throwError ErrAppNonFun
+
+-- Cases for ctl
     -- KontOne es ienv k -> do
     --   case mv of
     --     Nothing ->
@@ -95,19 +114,15 @@ stepRet rv = do
     --   --     -- modify' (\st -> st { stFocus = e, stKont = k' })
     --   --     error "TODO"
     --   pure StepResCont
-    -- RedKontAppFirst e k -> do
-    --   error "TODO"
-    -- RedKontAppSecond v k -> do
-    --   error "TODO"
-    _ -> throwError ErrTodo
 
 step :: M StepRes
 step = do
   focus <- gets stFocus
   case focus of
     FocusRed e -> StepResCont <$ stepFocus e
-    FocusRet rv -> error "TODO" -- stepRet rv
-    -- FocusAlt {} -> _
+    FocusRet rv -> StepResCont <$ stepRet rv
+    FocusAlt {} -> throwError (ErrTodo "focus alt")
+    FocusCtl {} -> throwError (ErrTodo "focus ctl")
 
 multiStep :: M ()
 multiStep = do

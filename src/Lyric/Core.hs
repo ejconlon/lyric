@@ -13,6 +13,7 @@ import Data.String (IsString (..))
 import Data.Text (Text)
 import Lyric.UnionMap (UnionMap)
 import qualified Lyric.UnionMap as UM
+import qualified Data.Sequence as Seq
 
 newtype Index = Index { unTmIndex :: Int }
   deriving stock (Show)
@@ -28,6 +29,9 @@ newtype TmVar = TmVar { unTmVar :: Text }
 
 data Op = OpGt | OpAdd
   deriving stock (Eq, Ord, Show, Enum, Bounded)
+
+opArity :: Op -> Int
+opArity = const 2
 
 data Exp =
     ExpVar !TmVar
@@ -65,8 +69,15 @@ data Val =
   | ValLam !Ctx !TmVar !Exp
   | ValInt !Int
   | ValOp !Op
-  | ValPart !Int !Val !(Seq Val)
+  | ValPart !Val !(Seq Val)
   deriving stock (Eq, Ord, Show)
+
+valArity :: Val -> Int
+valArity = \case
+  ValLam {} -> 1
+  ValOp o -> opArity o
+  ValPart hd tl -> valArity hd - Seq.length tl
+  _ -> 0
 
 -- type Trim = IntLikeSet TmUniq
 
@@ -111,7 +122,8 @@ instance Exception TrailErr
 data Err =
     ErrMerge !TrailErr
   | ErrMissing !TmUniq
-  | ErrTodo
+  | ErrAppNonFun
+  | ErrTodo !String
   deriving stock (Eq, Ord, Show)
 
 instance Exception Err
@@ -130,7 +142,7 @@ data RedKont =
     RedKontTop
   | RedKontAlt !Env !Exp RedKont
   | RedKontAppFirst !Exp RedKont
-  | RedKontAppSecond !Val RedKont
+  | RedKontAppSecond !Int !Val RedKont
   deriving stock (Eq, Show)
 
 makeBaseFunctor ''RedKont

@@ -38,6 +38,7 @@ default-extensions:
 - GeneralizedNewtypeDeriving
 - LambdaCase
 - KindSignatures
+- MultiWayIf
 - MultiParamTypeClasses
 - Rank2Types
 - ScopedTypeVariables
