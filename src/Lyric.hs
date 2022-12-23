@@ -1,5 +1,6 @@
 module Lyric where
 
+import Control.Monad (unless)
 import Control.Monad.Except (ExceptT, MonadError (..), runExceptT)
 import Control.Monad.Reader (MonadReader (..), ReaderT (..))
 import Control.Monad.State.Strict (MonadState (..), State, gets, modify', runState)
@@ -7,7 +8,7 @@ import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
 import Lyric.Core (Alt (..), CtlKont (..), Ctx, Env, Err (..), Exp (..), Focus (..), Fun (..), MergeErr (..), Op (..),
                    RedKont (..), RetVal (..), St (..), TmUniq (..), TmVar, Trail (..), TrailErr (..), Union, Val (..),
-                   ctlRedKont, initSt, matchFun, stUnionL)
+                   ctlAddAlt, ctlRedKont, initSt, matchFun, stUnionL)
 import Lyric.Lenses (runStateLens)
 import Lyric.UnionFind (MergeRes (..))
 import qualified Lyric.UnionMap as UM
@@ -30,6 +31,9 @@ setEnv env = modify' (\st -> st { stEnv = env })
 setCtlKont :: CtlKont -> M ()
 setCtlKont k = modify' (\st -> st { stCtlKont = k })
 
+modifyCtlKont :: (CtlKont -> CtlKont) -> M ()
+modifyCtlKont f = modify' (\st -> st { stCtlKont = f (stCtlKont st)})
+
 setRedKont :: RedKont -> M ()
 setRedKont = modifyRedKont . const
 
@@ -44,13 +48,16 @@ modifyRedKont f = modify' $ \st ->
 
 stepFocus :: Exp -> M ()
 stepFocus = \case
-    ExpFail -> do
+    ExpFail ->
       setFocus (FocusRet RetValFail)
-    ExpAlt a b -> do
-      setFocus (FocusRed a)
+    ExpAlt x y -> do
+      setFocus (FocusRed x)
       ienv <- gets stEnv
-      modifyRedKont (RedKontAlt ienv b)
-    ExpInt k -> do
+      modifyCtlKont $ \j ->
+        let k = ctlRedKont j
+            a = Alt y ienv k
+        in ctlAddAlt a j
+    ExpInt k ->
       setFocus (FocusRet (RetValPure (ValInt k)))
     ExpApp a b -> do
       setFocus (FocusRed a)
@@ -69,7 +76,7 @@ stepRet rv = do
       case redKont of
         RedKontTop -> setFocus (FocusCtl rv)
         RedKontAlt {} -> todo "ret alt"
-        RedKontAppFirst e k -> do
+        RedKontAppFirst e k ->
           case matchFun v of
             Just f -> do
               setFocus (FocusRed e)
@@ -79,17 +86,15 @@ stepRet rv = do
           case f of
             FunOp ar hd tl ->
               if ar == 1
-                then do
-                  applyOp hd (tl :|> v)
-                else do
-                  setFocus (FocusRet (RetValPure (ValOp hd (tl :|> v))))
+                then applyOp hd (tl :|> v)
+                else setFocus (FocusRet (RetValPure (ValOp hd (tl :|> v))))
             FunLam ctx b e -> applyLam ctx b e v
           setRedKont k
 
 applyOp :: Op -> Seq Val -> M ()
-applyOp OpAdd (ValInt a :<| ValInt b :<| Empty) = do
+applyOp OpAdd (ValInt a :<| ValInt b :<| Empty) =
   setFocus (FocusRet (RetValPure (ValInt (a + b))))
-applyOp OpGt (ValInt a :<| ValInt b :<| Empty) = do
+applyOp OpGt (ValInt a :<| ValInt b :<| Empty) =
   setFocus $ FocusRet $
     if a > b
       then RetValPure (ValInt (a + b))
@@ -116,35 +121,6 @@ stepCtl rv = do
               setCtlKont (CtlKontOne k as' j)
     CtlKontAll _k _as _vs _j -> todo "ctl all"
 
--- Cases for ctl
-    -- KontOne es ienv k -> do
-    --   case mv of
-    --     Nothing ->
-    --       case es of
-    --         Empty -> do
-    --           setEnv ienv
-    --           setKont k
-    --         e :<| es' -> do
-    --           setFocus (FocusRed e)
-    --           setEnv ienv
-    --           setKont (KontOne es' ienv k)
-    --     Just _ -> do
-    --       setKont k
-    --   pure StepResCont
-    -- KontAll vs es ienv k -> do
-    --   let vs' = maybe vs (vs :|>) mv
-    --   case es of
-    --     Empty -> do
-    --       -- let e = ExpVal (ValTup (fmap ExpVal vs'))
-    --       -- setFocus e
-    --       error "TODO"
-    --     e :<| es' -> do
-    --       error "TODO"
-    --   --     -- let k' = KontAll vs' es' k
-    --   --     -- modify' (\st -> st { stFocus = e, stKont = k' })
-    --   --     error "TODO"
-    --   pure StepResCont
-
 data StepRes =
     StepResCont
   | StepResHalt !RetVal
@@ -156,7 +132,6 @@ step = do
   case focus of
     FocusRed e -> StepResCont <$ stepFocus e
     FocusRet rv -> StepResCont <$ stepRet rv
-    -- FocusAlt {} -> throwError (ErrTodo "focus alt")
     FocusCtl rv -> StepResCont <$ stepCtl rv
     FocusHalt rv -> pure (StepResHalt rv)
 
@@ -232,8 +207,11 @@ expAlts = \case
   [b] -> b
   b:bs -> ExpAlt b (expAlts bs)
 
-testExp :: Exp
-testExp = expApp (ExpOp OpAdd) [ExpInt 1, ExpInt 2]
+caseAdd :: Exp
+caseAdd = expApp (ExpOp OpAdd) [ExpInt 1, ExpInt 2]
+
+caseAlt :: Exp
+caseAlt = expAlts [ExpFail, ExpInt 1]
 
 evalExp :: Exp -> Either (Err, St) RetVal
 evalExp ex =
@@ -241,3 +219,14 @@ evalExp ex =
   in case erv of
     Left er -> Left (er, st)
     Right rv -> Right rv
+
+(===) :: (Eq a, Show a) => a -> a -> IO ()
+(===) x y = unless (x == y) $ do
+  putStrLn "Equality assertion failed:"
+  print x
+  print y
+
+testCases :: IO ()
+testCases = do
+  evalExp caseAdd === Right (RetValPure (ValInt 3))
+  evalExp caseAlt === Right (RetValPure (ValInt 1))

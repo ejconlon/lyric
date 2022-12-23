@@ -71,37 +71,20 @@ data Val =
   | ValOp !Op !(Seq Val)
   deriving stock (Eq, Ord, Show)
 
--- valArity :: Val -> Int
--- valArity = \case
---   ValLam {} -> 1
---   ValOp hd tl -> opArity hd - Seq.length tl
---   _ -> 0
-
 data Fun =
     FunOp !Int !Op (Seq Val)
   | FunLam !Ctx !TmVar !Exp
   deriving stock (Eq, Ord, Show)
 
--- isFun :: Val -> Bool
--- isFun = \case
---   ValOp hd tl | opArity hd > Seq.length tl -> True
---   ValLam {} -> True
---   _ -> False
-
 matchFun :: Val -> Maybe Fun
 matchFun = \case
   ValOp hd tl ->
     let ar = opArity hd - Seq.length tl
-    in Just (FunOp ar hd tl)
+    in if ar >= 1
+      then Just (FunOp ar hd tl)
+      else Nothing
   ValLam ctx b e -> Just (FunLam ctx b e)
   _ -> Nothing
-
--- type Trim = IntLikeSet TmUniq
-
--- data Slot = Slot
---   { slotTrim :: !Trim
---   , slotVal :: !Val
---   } deriving stock (Eq, Show)
 
 type Union = UnionMap TmUniq Val
 
@@ -181,6 +164,12 @@ ctlRedKont = \case
   CtlKontOne k _ _ -> k
   CtlKontAll k _ _ _-> k
 
+ctlAddAlt :: Alt -> CtlKont -> CtlKont
+ctlAddAlt a = \case
+  CtlKontTop -> CtlKontOne RedKontTop (Seq.singleton a) CtlKontTop
+  CtlKontOne k as j -> CtlKontOne k (a :<| as) j
+  CtlKontAll k as vs j -> CtlKontAll k (a :<| as) vs j
+
 makeBaseFunctor ''CtlKont
 deriving instance Eq r => Eq (CtlKontF r)
 deriving instance Show r => Show (CtlKontF r)
@@ -194,7 +183,6 @@ data Focus =
     FocusRed !Exp
   | FocusRet !RetVal
   | FocusCtl !RetVal
-  -- | FocusAlt !Alt !Val
   | FocusHalt !RetVal
   deriving stock (Eq, Show)
 
