@@ -5,8 +5,9 @@ import Control.Monad.Reader (MonadReader (..), ReaderT (..))
 import Control.Monad.State.Strict (MonadState (..), State, gets, modify', runState)
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
-import Lyric.Core (CtlKont (..), Env, Err (..), Exp (..), Focus (..), MergeErr (..), Op (..), RedKont (..), RetVal (..),
-                   St (..), TmUniq (..), Trail (..), TrailErr (..), Union, Val (..), ctlRedKont, initSt, stUnionL, valArity)
+import Lyric.Core (Alt (..), CtlKont (..), Ctx, Env, Err (..), Exp (..), Focus (..), Fun (..), MergeErr (..), Op (..),
+                   RedKont (..), RetVal (..), St (..), TmUniq (..), TmVar, Trail (..), TrailErr (..), Union, Val (..),
+                   ctlRedKont, initSt, matchFun, stUnionL)
 import Lyric.Lenses (runStateLens)
 import Lyric.UnionFind (MergeRes (..))
 import qualified Lyric.UnionMap as UM
@@ -36,15 +37,10 @@ modifyRedKont :: (RedKont -> RedKont) -> M ()
 modifyRedKont f = modify' $ \st ->
   st { stCtlKont =
     case stCtlKont st of
-      CtlKontTop -> CtlKontOne (f RedKontTop) CtlKontTop
-      CtlKontOne k j -> CtlKontOne (f k) j
-      CtlKontAll vs k j -> CtlKontAll vs (f k) j
+      CtlKontTop -> CtlKontOne (f RedKontTop) Empty CtlKontTop
+      CtlKontOne k as j -> CtlKontOne (f k) as j
+      CtlKontAll k as vs j -> CtlKontAll (f k) as vs j
   }
-
-data StepRes =
-    StepResCont
-  | StepResDone
-  deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 stepFocus :: Exp -> M ()
 stepFocus = \case
@@ -60,7 +56,7 @@ stepFocus = \case
       setFocus (FocusRed a)
       modifyRedKont (RedKontAppFirst b)
     ExpOp o ->
-      setFocus (FocusRet (RetValPure (ValOp o)))
+      setFocus (FocusRet (RetValPure (ValOp o Empty)))
     _ -> todo "more focus cases"
 
 stepRet :: RetVal -> M ()
@@ -74,17 +70,51 @@ stepRet rv = do
         RedKontTop -> setFocus (FocusCtl rv)
         RedKontAlt {} -> todo "ret alt"
         RedKontAppFirst e k -> do
-          let ar = valArity v
-          if ar >= 1
-            then do
+          case matchFun v of
+            Just f -> do
               setFocus (FocusRed e)
-              setRedKont (RedKontAppSecond ar v k)
-            else throwError ErrAppNonFun
-        RedKontAppSecond ar w k ->
-          if
-            | ar > 1 -> todo "apply partial"
-            | ar == 1 -> todo "apply fun"
-            | otherwise -> throwError ErrAppNonFun
+              setRedKont (RedKontAppSecond f k)
+            _ -> throwError ErrAppNonFun
+        RedKontAppSecond f k -> do
+          case f of
+            FunOp ar hd tl ->
+              if ar == 1
+                then do
+                  applyOp hd (tl :|> v)
+                else do
+                  setFocus (FocusRet (RetValPure (ValOp hd (tl :|> v))))
+            FunLam ctx b e -> applyLam ctx b e v
+          setRedKont k
+
+applyOp :: Op -> Seq Val -> M ()
+applyOp OpAdd (ValInt a :<| ValInt b :<| Empty) = do
+  setFocus (FocusRet (RetValPure (ValInt (a + b))))
+applyOp OpGt (ValInt a :<| ValInt b :<| Empty) = do
+  setFocus $ FocusRet $
+    if a > b
+      then RetValPure (ValInt (a + b))
+      else RetValFail
+applyOp _ _ = throwError ErrAppOp
+
+applyLam :: Ctx -> TmVar -> Exp -> Val -> M ()
+applyLam _ _ _ _ = todo "apply lam"
+
+stepCtl :: RetVal -> M ()
+stepCtl rv = do
+  ctlKont <- gets stCtlKont
+  case ctlKont of
+    CtlKontTop -> setFocus (FocusHalt rv)
+    CtlKontOne _ as j ->
+      case rv of
+        RetValPure _ -> setCtlKont j
+        RetValFail ->
+          case as of
+            Empty -> setCtlKont j
+            Alt e ienv k :<| as' -> do
+              setFocus (FocusRed e)
+              setEnv ienv
+              setCtlKont (CtlKontOne k as' j)
+    CtlKontAll _k _as _vs _j -> todo "ctl all"
 
 -- Cases for ctl
     -- KontOne es ienv k -> do
@@ -115,21 +145,27 @@ stepRet rv = do
     --   --     error "TODO"
     --   pure StepResCont
 
+data StepRes =
+    StepResCont
+  | StepResHalt !RetVal
+  deriving stock (Eq, Ord, Show)
+
 step :: M StepRes
 step = do
   focus <- gets stFocus
   case focus of
     FocusRed e -> StepResCont <$ stepFocus e
     FocusRet rv -> StepResCont <$ stepRet rv
-    FocusAlt {} -> throwError (ErrTodo "focus alt")
-    FocusCtl {} -> throwError (ErrTodo "focus ctl")
+    -- FocusAlt {} -> throwError (ErrTodo "focus alt")
+    FocusCtl rv -> StepResCont <$ stepCtl rv
+    FocusHalt rv -> pure (StepResHalt rv)
 
-multiStep :: M ()
+multiStep :: M RetVal
 multiStep = do
   res <- step
   case res of
     StepResCont -> multiStep
-    StepResDone -> pure ()
+    StepResHalt rv -> pure rv
 
 newtype N a = N { unN :: ReaderT Trail (ExceptT TrailErr (State Union)) a }
   deriving newtype (Functor, Applicative, Monad, MonadReader Trail, MonadState Union, MonadError TrailErr)
@@ -174,11 +210,7 @@ mergeVal x y =
       if xk == yk
         then pure x
         else throwMergeErr (MergeErrInt xk yk)
-    (ValOp xo, ValOp yo) ->
-      if xo == yo
-        then pure x
-        else throwMergeErr (MergeErrOp xo yo)
-    (ValPart {}, ValPart {}) -> throwMergeErr MergeErrPart
+    (ValOp {}, ValOp {}) -> throwMergeErr MergeErrOp
     _ -> throwMergeErr MergeErrMismatch
 
 mergeUniq :: TmUniq -> TmUniq -> M TmUniq
@@ -203,9 +235,9 @@ expAlts = \case
 testExp :: Exp
 testExp = expApp (ExpOp OpAdd) [ExpInt 1, ExpInt 2]
 
-evalExp :: Exp -> Either (Err, St) Focus
+evalExp :: Exp -> Either (Err, St) RetVal
 evalExp ex =
-  let (eu, st) = runM multiStep (initSt ex)
-  in case eu of
+  let (erv, st) = runM multiStep (initSt ex)
+  in case erv of
     Left er -> Left (er, st)
-    Right _ -> Right (stFocus st)
+    Right rv -> Right rv

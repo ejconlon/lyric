@@ -9,11 +9,11 @@ import Data.Functor.Foldable.TH (makeBaseFunctor)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Sequence (Seq (..))
+import qualified Data.Sequence as Seq
 import Data.String (IsString (..))
 import Data.Text (Text)
 import Lyric.UnionMap (UnionMap)
 import qualified Lyric.UnionMap as UM
-import qualified Data.Sequence as Seq
 
 newtype Index = Index { unTmIndex :: Int }
   deriving stock (Show)
@@ -68,16 +68,33 @@ data Val =
   | ValTup !(Seq Val)
   | ValLam !Ctx !TmVar !Exp
   | ValInt !Int
-  | ValOp !Op
-  | ValPart !Val !(Seq Val)
+  | ValOp !Op !(Seq Val)
   deriving stock (Eq, Ord, Show)
 
-valArity :: Val -> Int
-valArity = \case
-  ValLam {} -> 1
-  ValOp o -> opArity o
-  ValPart hd tl -> valArity hd - Seq.length tl
-  _ -> 0
+-- valArity :: Val -> Int
+-- valArity = \case
+--   ValLam {} -> 1
+--   ValOp hd tl -> opArity hd - Seq.length tl
+--   _ -> 0
+
+data Fun =
+    FunOp !Int !Op (Seq Val)
+  | FunLam !Ctx !TmVar !Exp
+  deriving stock (Eq, Ord, Show)
+
+-- isFun :: Val -> Bool
+-- isFun = \case
+--   ValOp hd tl | opArity hd > Seq.length tl -> True
+--   ValLam {} -> True
+--   _ -> False
+
+matchFun :: Val -> Maybe Fun
+matchFun = \case
+  ValOp hd tl ->
+    let ar = opArity hd - Seq.length tl
+    in Just (FunOp ar hd tl)
+  ValLam ctx b e -> Just (FunLam ctx b e)
+  _ -> Nothing
 
 -- type Trim = IntLikeSet TmUniq
 
@@ -95,8 +112,7 @@ data MergeErr =
     MergeErrTupLen !Int !Int
   | MergeErrLam
   | MergeErrInt !Int !Int
-  | MergeErrOp !Op !Op
-  | MergeErrPart
+  | MergeErrOp
   | MergeErrMismatch
   deriving stock (Eq, Ord, Show)
 
@@ -123,6 +139,7 @@ data Err =
     ErrMerge !TrailErr
   | ErrMissing !TmUniq
   | ErrAppNonFun
+  | ErrAppOp
   | ErrTodo !String
   deriving stock (Eq, Ord, Show)
 
@@ -142,24 +159,27 @@ data RedKont =
     RedKontTop
   | RedKontAlt !Env !Exp RedKont
   | RedKontAppFirst !Exp RedKont
-  | RedKontAppSecond !Int !Val RedKont
+  | RedKontAppSecond !Fun RedKont
   deriving stock (Eq, Show)
 
 makeBaseFunctor ''RedKont
 deriving instance Eq r => Eq (RedKontF r)
 deriving instance Show r => Show (RedKontF r)
 
+data Alt = Alt !Exp !Env !RedKont
+  deriving stock (Eq, Show)
+
 data CtlKont =
     CtlKontTop
-  | CtlKontOne !RedKont CtlKont
-  | CtlKontAll !(Seq Val) !RedKont CtlKont
+  | CtlKontOne !RedKont !(Seq Alt) CtlKont
+  | CtlKontAll !RedKont !(Seq Alt) !(Seq Val) CtlKont
   deriving stock (Eq, Show)
 
 ctlRedKont :: CtlKont -> RedKont
 ctlRedKont = \case
   CtlKontTop -> RedKontTop
-  CtlKontOne k _ -> k
-  CtlKontAll _ k _ -> k
+  CtlKontOne k _ _ -> k
+  CtlKontAll k _ _ _-> k
 
 makeBaseFunctor ''CtlKont
 deriving instance Eq r => Eq (CtlKontF r)
@@ -174,7 +194,8 @@ data Focus =
     FocusRed !Exp
   | FocusRet !RetVal
   | FocusCtl !RetVal
-  | FocusAlt !Env !Exp !RedKont !Val
+  -- | FocusAlt !Alt !Val
+  | FocusHalt !RetVal
   deriving stock (Eq, Show)
 
 data St = St
