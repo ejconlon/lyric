@@ -18,12 +18,14 @@ module Lyric.UnionFind
   , stateMerge
   ) where
 
-import Control.Monad.State.Strict (State, modify', state)
+import Control.Lens (Lens')
+import Control.Monad.State.Strict (MonadState)
 import Data.Coerce (Coercible)
 import IntLike.Map (IntLikeMap)
 import qualified IntLike.Map as ILM
 import IntLike.Set (IntLikeSet)
 import qualified IntLike.Set as ILS
+import Lyric.Lenses (execStateLens, runStateLens)
 
 -- private ctor
 data UnionFind x = UnionFind
@@ -47,8 +49,8 @@ members u@(UnionFind _ p) = foldr go (ILM.empty, u) (ILM.keys p) where
         m' = ILM.insert x2 (maybe (ILS.singleton x1) (ILS.insert x1) (ILM.lookup x2 m)) m
     in (m', v')
 
-stateMembers :: (Eq x, Coercible x Int) => State (UnionFind x) (IntLikeMap x (IntLikeSet x))
-stateMembers = state members
+stateMembers :: (Eq x, Coercible x Int, MonadState s m) => Lens' s (UnionFind x) -> m (IntLikeMap x (IntLikeSet x))
+stateMembers l = runStateLens l (pure . members)
 
 insert :: Coercible x Int => x -> UnionFind x -> UnionFind x
 insert x u@(UnionFind z p) =
@@ -56,8 +58,8 @@ insert x u@(UnionFind z p) =
     then u
     else UnionFind (z + 1) (ILM.insert x x p)
 
-stateInsert :: Coercible x Int => x -> State (UnionFind x) ()
-stateInsert = modify' . insert
+stateInsert :: (Coercible x Int, MonadState s m) => Lens' s (UnionFind x) -> x -> m ()
+stateInsert l x = execStateLens l (pure . insert x)
 
 -- private
 findRootAcc :: (Eq x, Coercible x Int) => IntLikeMap x x -> [x] -> x -> ([x], x)
@@ -80,8 +82,8 @@ findRoot u@(UnionFind z p) x1 =
 find :: (Eq x, Coercible x Int) => x -> UnionFind x -> (Maybe x, UnionFind x)
 find a u@(UnionFind _ p) = maybe (Nothing, u) (\x -> let (y, v) = findRoot u x in (Just y, v)) (ILM.lookup a p)
 
-stateFind :: (Eq x, Coercible x Int) => x -> State (UnionFind x) (Maybe x)
-stateFind = state . find
+stateFind :: (Eq x, Coercible x Int, MonadState s m) => Lens' s (UnionFind x) -> x -> m (Maybe x)
+stateFind l x = runStateLens l (pure . find x)
 
 data MergeRes x =
     MergeResMissing !x
@@ -119,5 +121,5 @@ merge i j u@(UnionFind z p) = guardMerge where
             u' = UnionFind (z - 1) p'
         in (MergeResChanged knew kold, u')
 
-stateMerge :: (Ord x, Coercible x Int) => x -> x -> State (UnionFind x) (MergeRes x)
-stateMerge i j = state (merge i j)
+stateMerge :: (Ord x, Coercible x Int, MonadState s m) => Lens' s (UnionFind x) -> x -> x -> m (MergeRes x)
+stateMerge l i j = runStateLens l (pure . merge i j)

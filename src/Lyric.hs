@@ -190,7 +190,7 @@ mergeVal x y =
 
 mergeUniq :: TmUniq -> TmUniq -> M TmUniq
 mergeUniq a b = do
-  res <- embedN (UM.stateMergeL id mergeVal a b) (TrailStart a b)
+  res <- embedN (UM.stateMerge id mergeVal a b) (TrailStart a b)
   case res of
     MergeResMissing x -> throwError (ErrMissing x)
     MergeResUnchanged x -> pure x

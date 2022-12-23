@@ -8,11 +8,11 @@ module Lyric.UnionMap
   , empty
   , size
   , insert
-  , stateInsertL
+  , stateInsert
   , find
-  , stateFindL
+  , stateFind
   , MergeFun
-  , stateMergeL
+  , stateMerge
   ) where
 
 import Control.Lens (Lens')
@@ -41,8 +41,8 @@ size = UF.size . unionFind
 insert :: Coercible k Int => k -> v -> UnionMap k v -> UnionMap k v
 insert k v (UnionMap uf m) = UnionMap (UF.insert k uf) (ILM.insert k v m)
 
-stateInsertL :: (Coercible k Int, MonadState s m) => Lens' s (UnionMap k v) -> k -> v -> m ()
-stateInsertL l k v = execStateLens l (pure . insert k v)
+stateInsert :: (Coercible k Int, MonadState s m) => Lens' s (UnionMap k v) -> k -> v -> m ()
+stateInsert l k v = execStateLens l (pure . insert k v)
 
 find :: (Eq k, Coercible k Int) => k -> UnionMap k v -> (Maybe (k, v), UnionMap k v)
 find k (UnionMap uf m) =
@@ -51,8 +51,8 @@ find k (UnionMap uf m) =
       mp = fmap (\x -> (x, ILM.partialLookup x m)) mx
   in (mp, u')
 
-stateFindL :: (Eq k, Coercible k Int, MonadState s m) => Lens' s (UnionMap k v) -> k -> m (Maybe (k, v))
-stateFindL l k = runStateLens l (pure . find k)
+stateFind :: (Eq k, Coercible k Int, MonadState s m) => Lens' s (UnionMap k v) -> k -> m (Maybe (k, v))
+stateFind l k = runStateLens l (pure . find k)
 
 -- Must be symmetric, reflexive, etc
 type MergeFun m v = v -> v -> m v
@@ -61,8 +61,8 @@ type MergeFun m v = v -> v -> m v
 -- merges can be applied. Be very careful: it's not going to yield the correct results if recursive calls
 -- merge keys that are already waiting for their values to be merged... Essentially, this means that your
 -- graph should not have cycles.
-stateMergeL :: (Ord k, Coercible k Int, MonadState s m) => Lens' s (UnionMap k v) -> MergeFun m v -> k -> k -> m (MergeRes k)
-stateMergeL l f a b = do
+stateMerge :: (Ord k, Coercible k Int, MonadState s m) => Lens' s (UnionMap k v) -> MergeFun m v -> k -> k -> m (MergeRes k)
+stateMerge l f a b = do
   -- Merge classes in the union find
   -- and write the result immediately
   (res, mz) <- runStateLens l $ \(UnionMap uf m) ->
