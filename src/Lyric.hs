@@ -69,6 +69,16 @@ stepFocus = \case
         e :<| es' -> do
           setFocus (FocusRed e)
           modifyRedKont (RedKontTup Empty es')
+    ExpOne e -> do
+      setFocus (FocusRed e)
+      modifyCtlKont $ \j ->
+        let k = ctlRedKont j
+        in CtlKontOne k Empty j
+    ExpAll e -> do
+      setFocus (FocusRed e)
+      modifyCtlKont $ \j ->
+        let k = ctlRedKont j
+        in CtlKontAll k Empty Empty j
     _ -> todo "more focus cases"
 
 stepRet :: RetVal -> M ()
@@ -132,7 +142,18 @@ stepCtl rv = do
               setFocus (FocusRed e)
               setEnv ienv
               setCtlKont (CtlKontOne k as' j)
-    CtlKontAll _k _as _vs _j -> todo "ctl all"
+    CtlKontAll _ as vs j -> do
+      let vs' = case rv of
+            RetValPure v -> vs :|> v
+            RetValFail -> vs
+      case as of
+        Empty -> do
+          setFocus (FocusRet (RetValPure (ValTup vs')))
+          setCtlKont j
+        Alt e ienv k :<| as' -> do
+          setFocus (FocusRed e)
+          setEnv ienv
+          setCtlKont (CtlKontAll k as' vs' j)
 
 data StepRes =
     StepResCont

@@ -15,17 +15,32 @@ evalExp ex =
 
 testCases :: TestTree
 testCases = testCase "cases" $ do
+  let valOne = ValInt 1
+  let valTup = ValTup (Seq.fromList [ValInt 1, ValInt 2])
+
   -- Primitive op
   let caseAdd = expApp (ExpOp OpAdd) [ExpInt 1, ExpInt 2]
   evalExp caseAdd @?= Right (RetValPure (ValInt 3))
 
-  -- Alternative (succeeding)
-  let caseAlt = expAlts [ExpFail, ExpInt 1]
-  evalExp caseAlt @?= Right (RetValPure (ValInt 1))
+  -- Alternative (succeeding) - implicit one
+  let caseAlt = expAlts [ExpFail, ExpInt 1, ExpInt 2]
+  evalExp caseAlt @?= Right (RetValPure valOne)
 
   -- Tuple
   let caseTup = expTup [ExpInt 1, ExpInt 2]
-  evalExp caseTup @?= Right (RetValPure (ValTup (Seq.fromList [ValInt 1, ValInt 2])))
+  evalExp caseTup @?= Right (RetValPure valTup)
+
+  -- Fail
+  let caseFail = ExpFail
+  evalExp caseFail @?= Right RetValFail
+
+  -- Alternative (succeeding) - explicit one
+  let caseOne = ExpOne caseAlt
+  evalExp caseOne @?= Right (RetValPure valOne)
+
+  -- All alternatives
+  let caseAll = ExpAll caseAlt
+  evalExp caseAll @?= Right (RetValPure valTup)
 
 main :: IO ()
 main = defaultMain (testGroup "Lyric" [testCases])
