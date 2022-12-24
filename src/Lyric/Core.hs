@@ -143,6 +143,7 @@ data RedKont =
   | RedKontAlt !Env !Exp RedKont
   | RedKontAppFirst !Exp RedKont
   | RedKontAppSecond !Fun RedKont
+  | RedKontTup !(Seq Val) !(Seq Exp) RedKont
   deriving stock (Eq, Show)
 
 makeBaseFunctor ''RedKont

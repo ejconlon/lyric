@@ -63,6 +63,12 @@ stepFocus = \case
       modifyRedKont (RedKontAppFirst b)
     ExpOp o ->
       setFocus (FocusRet (RetValPure (ValOp o Empty)))
+    ExpTup es ->
+      case es of
+        Empty -> setFocus (FocusRet (RetValPure (ValTup Empty)))
+        e :<| es' -> do
+          setFocus (FocusRed e)
+          modifyRedKont (RedKontTup Empty es')
     _ -> todo "more focus cases"
 
 stepRet :: RetVal -> M ()
@@ -89,6 +95,14 @@ stepRet rv = do
                 else setFocus (FocusRet (RetValPure (ValOp hd (tl :|> v))))
             FunLam ctx b e -> applyLam ctx b e v
           setRedKont k
+        RedKontTup vs es k ->
+          case es of
+            Empty -> do
+              setFocus (FocusRet (RetValPure (ValTup (vs :|> v))))
+              setRedKont k
+            e :<| es' -> do
+              setFocus (FocusRed e)
+              setRedKont (RedKontTup (vs :|> v) es' k)
 
 applyOp :: Op -> Seq Val -> M ()
 applyOp OpAdd (ValInt a :<| ValInt b :<| Empty) =
@@ -205,3 +219,6 @@ expAlts = \case
   [] -> ExpFail
   [b] -> b
   b:bs -> ExpAlt b (expAlts bs)
+
+expTup :: [Exp] -> Exp
+expTup = ExpTup . Seq.fromList
