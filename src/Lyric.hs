@@ -3,15 +3,15 @@ module Lyric where
 import Control.Monad.Except (ExceptT, MonadError (..), runExceptT)
 import Control.Monad.Reader (MonadReader (..), ReaderT (..))
 import Control.Monad.State.Strict (MonadState (..), State, gets, modify', runState)
+import qualified Data.Map.Strict as Map
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
-import Lyric.Core (Alt (..), CtlKont (..), Ctx, Env (..), Err (..), Exp (..), Focus (..), Fun (..), MergeErr (..), Op (..),
-                   RedKont (..), RetVal (..), St (..), TmUniq (..), TmVar, Trail (..), TrailErr (..), Union, Val (..),
-                   ctlAddAlt, ctlRedKont, matchFun, stUnionL)
+import Lyric.Core (Alt (..), CtlKont (..), Ctx, Env (..), Err (..), Exp (..), Focus (..), Fun (..), MergeErr (..),
+                   Op (..), RedKont (..), RetVal (..), St (..), TmUniq (..), TmVar, Trail (..), TrailErr (..), Union,
+                   Val (..), ctlAddAlt, ctlRedKont, matchFun, stUnionL)
 import Lyric.Lenses (runStateLens)
 import Lyric.UnionFind (MergeRes (..))
 import qualified Lyric.UnionMap as UM
-import qualified Data.Map.Strict as Map
 
 newtype M a = M { unM :: ExceptT Err (State St) a }
   deriving newtype (Functor, Applicative, Monad, MonadError Err, MonadState St)

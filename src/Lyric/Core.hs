@@ -5,7 +5,7 @@ module Lyric.Core where
 import Control.Exception (Exception)
 import Control.Lens (Lens')
 import Control.Lens.TH (makeLensesFor)
-import Data.Functor.Foldable.TH (makeBaseFunctor)
+-- import Data.Functor.Foldable.TH (makeBaseFunctor)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Sequence (Seq (..))
@@ -36,24 +36,24 @@ opArity = const 2
 data Exp =
     ExpVar !TmVar
   | ExpTup !(Seq Exp)
-  | ExpLam !TmVar !Exp
+  | ExpLam !TmVar !Exp -- TODO
   | ExpInt !Int
   | ExpOp !Op
   | ExpApp Exp Exp
-  | ExpSeq Exp Exp
+  | ExpSeq Exp Exp -- TODO
   | ExpExists !TmVar Exp
   | ExpFail
   | ExpAlt Exp Exp
   | ExpOne Exp
   | ExpAll Exp
-  | ExpUnify Exp Exp
-  | ExpLet !TmVar Exp Exp
+  | ExpUnify Exp Exp -- TODO
+  | ExpLet !TmVar Exp Exp -- TODO
   deriving stock (Eq, Ord, Show)
 
-makeBaseFunctor ''Exp
-deriving instance Eq r => Eq (ExpF r)
-deriving instance Ord r => Ord (ExpF r)
-deriving instance Show r => Show (ExpF r)
+-- makeBaseFunctor ''Exp
+-- deriving instance Eq r => Eq (ExpF r)
+-- deriving instance Ord r => Ord (ExpF r)
+-- deriving instance Show r => Show (ExpF r)
 
 type Ctx = Map TmVar TmUniq
 
@@ -105,10 +105,10 @@ data Trail =
   | TrailPartTail !Int !Trail
   deriving stock (Eq, Ord, Show)
 
-makeBaseFunctor ''Trail
-deriving instance Eq r => Eq (TrailF r)
-deriving instance Ord r => Ord (TrailF r)
-deriving instance Show r => Show (TrailF r)
+-- makeBaseFunctor ''Trail
+-- deriving instance Eq r => Eq (TrailF r)
+-- deriving instance Ord r => Ord (TrailF r)
+-- deriving instance Show r => Show (TrailF r)
 
 data TrailErr = TrailErr !Trail !MergeErr
   deriving stock (Eq, Ord, Show)
@@ -144,9 +144,9 @@ data RedKont =
   | RedKontTup !(Seq Val) !(Seq Exp) RedKont
   deriving stock (Eq, Show)
 
-makeBaseFunctor ''RedKont
-deriving instance Eq r => Eq (RedKontF r)
-deriving instance Show r => Show (RedKontF r)
+-- makeBaseFunctor ''RedKont
+-- deriving instance Eq r => Eq (RedKontF r)
+-- deriving instance Show r => Show (RedKontF r)
 
 data Alt = Alt !Exp !Env !RedKont
   deriving stock (Eq, Show)
@@ -169,9 +169,9 @@ ctlAddAlt a = \case
   CtlKontOne k as j -> CtlKontOne k (a :<| as) j
   CtlKontAll k as vs j -> CtlKontAll k (a :<| as) vs j
 
-makeBaseFunctor ''CtlKont
-deriving instance Eq r => Eq (CtlKontF r)
-deriving instance Show r => Show (CtlKontF r)
+-- makeBaseFunctor ''CtlKont
+-- deriving instance Eq r => Eq (CtlKontF r)
+-- deriving instance Show r => Show (CtlKontF r)
 
 data RetVal =
     RetValFail

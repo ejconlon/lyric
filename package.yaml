@@ -19,8 +19,8 @@ dependencies:
 - int-like
 - lens
 - mtl
-- recursion-schemes
 - text
+# - recursion-schemes
 
 default-extensions:
 - BangPatterns
