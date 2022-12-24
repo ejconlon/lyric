@@ -1,6 +1,5 @@
 module Lyric where
 
-import Control.Monad (unless)
 import Control.Monad.Except (ExceptT, MonadError (..), runExceptT)
 import Control.Monad.Reader (MonadReader (..), ReaderT (..))
 import Control.Monad.State.Strict (MonadState (..), State, gets, modify', runState)
@@ -8,7 +7,7 @@ import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
 import Lyric.Core (Alt (..), CtlKont (..), Ctx, Env, Err (..), Exp (..), Focus (..), Fun (..), MergeErr (..), Op (..),
                    RedKont (..), RetVal (..), St (..), TmUniq (..), TmVar, Trail (..), TrailErr (..), Union, Val (..),
-                   ctlAddAlt, ctlRedKont, initSt, matchFun, stUnionL)
+                   ctlAddAlt, ctlRedKont, matchFun, stUnionL)
 import Lyric.Lenses (runStateLens)
 import Lyric.UnionFind (MergeRes (..))
 import qualified Lyric.UnionMap as UM
@@ -206,27 +205,3 @@ expAlts = \case
   [] -> ExpFail
   [b] -> b
   b:bs -> ExpAlt b (expAlts bs)
-
-caseAdd :: Exp
-caseAdd = expApp (ExpOp OpAdd) [ExpInt 1, ExpInt 2]
-
-caseAlt :: Exp
-caseAlt = expAlts [ExpFail, ExpInt 1]
-
-evalExp :: Exp -> Either (Err, St) RetVal
-evalExp ex =
-  let (erv, st) = runM multiStep (initSt ex)
-  in case erv of
-    Left er -> Left (er, st)
-    Right rv -> Right rv
-
-(===) :: (Eq a, Show a) => a -> a -> IO ()
-(===) x y = unless (x == y) $ do
-  putStrLn "Equality assertion failed:"
-  print x
-  print y
-
-testCases :: IO ()
-testCases = do
-  evalExp caseAdd === Right (RetValPure (ValInt 3))
-  evalExp caseAlt === Right (RetValPure (ValInt 1))
