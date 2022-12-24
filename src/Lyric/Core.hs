@@ -5,11 +5,17 @@ module Lyric.Core where
 import Control.Exception (Exception)
 import Control.Lens (Lens')
 import Control.Lens.TH (makeLensesFor)
--- import Data.Functor.Foldable.TH (makeBaseFunctor)
+import Control.Monad (unless)
+import Control.Monad.Reader (MonadReader (..), ReaderT (..))
+import Control.Monad.Writer.Strict (MonadWriter (..), Writer, execWriter)
+import Data.Functor.Foldable (cata)
+import Data.Functor.Foldable.TH (makeBaseFunctor)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.String (IsString)
 import Data.Text (Text)
 import Lyric.UnionMap (UnionMap)
@@ -50,10 +56,35 @@ data Exp =
   | ExpLet !TmVar Exp Exp -- TODO
   deriving stock (Eq, Ord, Show)
 
--- makeBaseFunctor ''Exp
--- deriving instance Eq r => Eq (ExpF r)
--- deriving instance Ord r => Ord (ExpF r)
--- deriving instance Show r => Show (ExpF r)
+makeBaseFunctor ''Exp
+deriving instance Eq r => Eq (ExpF r)
+deriving instance Ord r => Ord (ExpF r)
+deriving instance Show r => Show (ExpF r)
+
+type F a = ReaderT (Set TmVar) (Writer (Set TmVar)) a
+
+execF :: F () -> Set TmVar -> Set TmVar
+execF f r = execWriter (runReaderT f r)
+
+expFree :: Exp -> Set TmVar
+expFree = flip execF Set.empty . cata go where
+  go = \case
+    ExpVarF b -> do
+      bs <- ask
+      unless (Set.member b bs) (tell (Set.singleton b))
+    ExpTupF xs -> sequence_ xs
+    ExpLamF b x -> local (Set.insert b) x
+    ExpIntF _ -> pure ()
+    ExpOpF _ -> pure ()
+    ExpAppF x y -> x >> y
+    ExpSeqF x y -> x >> y
+    ExpExistsF b x -> local (Set.insert b) x
+    ExpFailF -> pure ()
+    ExpAltF x y -> x >> y
+    ExpOneF x -> x
+    ExpAllF x -> x
+    ExpUnifyF x y -> x >> y
+    ExpLetF b x y -> x >> local (Set.insert b) y
 
 type Ctx = Map TmVar TmUniq
 

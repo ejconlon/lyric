@@ -65,6 +65,7 @@ library
     , int-like
     , lens
     , mtl
+    , recursion-schemes
     , text
   default-language: Haskell2010
 
@@ -108,6 +109,7 @@ test-suite lyric-test
     , lens
     , lyric
     , mtl
+    , recursion-schemes
     , tasty
     , tasty-hunit
     , text

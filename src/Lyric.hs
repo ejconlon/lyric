@@ -117,6 +117,7 @@ stepFocus = \case
       case mv of
         Nothing -> throwError (ErrUndeclared b)
         Just v -> setFocus (FocusRet (RetValPure v))
+    ExpLam _b _e -> todo "lam case"
     _ -> todo "more focus cases"
 
 stepRet :: RetVal -> M ()

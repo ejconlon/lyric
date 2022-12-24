@@ -20,7 +20,7 @@ dependencies:
 - lens
 - mtl
 - text
-# - recursion-schemes
+- recursion-schemes
 
 default-extensions:
 - BangPatterns
