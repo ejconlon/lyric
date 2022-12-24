@@ -10,7 +10,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
-import Data.String (IsString (..))
+import Data.String (IsString)
 import Data.Text (Text)
 import Lyric.UnionMap (UnionMap)
 import qualified Lyric.UnionMap as UM
@@ -21,7 +21,7 @@ newtype Index = Index { unTmIndex :: Int }
 
 newtype TmUniq = TmUniq { unTmUniq :: Int }
   deriving stock (Show)
-  deriving newtype (Eq, Ord, Num)
+  deriving newtype (Eq, Ord, Num, Enum)
 
 newtype TmVar = TmVar { unTmVar :: Text }
   deriving stock (Show)
@@ -49,9 +49,6 @@ data Exp =
   | ExpUnify Exp Exp
   | ExpLet !TmVar Exp Exp
   deriving stock (Eq, Ord, Show)
-
-instance IsString Exp where
-  fromString = ExpVar . fromString
 
 makeBaseFunctor ''Exp
 deriving instance Eq r => Eq (ExpF r)
@@ -121,6 +118,7 @@ instance Exception TrailErr
 data Err =
     ErrMerge !TrailErr
   | ErrMissing !TmUniq
+  | ErrUndeclared !TmVar
   | ErrAppNonFun
   | ErrAppOp
   | ErrTodo !String

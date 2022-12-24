@@ -5,12 +5,13 @@ import Control.Monad.Reader (MonadReader (..), ReaderT (..))
 import Control.Monad.State.Strict (MonadState (..), State, gets, modify', runState)
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
-import Lyric.Core (Alt (..), CtlKont (..), Ctx, Env, Err (..), Exp (..), Focus (..), Fun (..), MergeErr (..), Op (..),
+import Lyric.Core (Alt (..), CtlKont (..), Ctx, Env (..), Err (..), Exp (..), Focus (..), Fun (..), MergeErr (..), Op (..),
                    RedKont (..), RetVal (..), St (..), TmUniq (..), TmVar, Trail (..), TrailErr (..), Union, Val (..),
                    ctlAddAlt, ctlRedKont, matchFun, stUnionL)
 import Lyric.Lenses (runStateLens)
 import Lyric.UnionFind (MergeRes (..))
 import qualified Lyric.UnionMap as UM
+import qualified Data.Map.Strict as Map
 
 newtype M a = M { unM :: ExceptT Err (State St) a }
   deriving newtype (Functor, Applicative, Monad, MonadError Err, MonadState St)
@@ -44,6 +45,35 @@ modifyRedKont f = modify' $ \st ->
       CtlKontOne k as j -> CtlKontOne (f k) as j
       CtlKontAll k as vs j -> CtlKontAll (f k) as vs j
   }
+
+newUniq :: M TmUniq
+newUniq = state $ \st ->
+  let u = stUniq st
+  in (u, st { stUniq = succ u })
+
+bindVar :: TmVar -> M ()
+bindVar b = modify' $ \st ->
+  let u = stUniq st
+      uniq' = succ u
+      Env ctx union = stEnv st
+      ctx' = Map.insert b u ctx
+      union' = UM.insert u (ValVar u) union
+      env' = Env ctx' union'
+  in st { stEnv = env', stUniq = uniq' }
+
+lookupVar :: TmVar -> M (Maybe Val)
+lookupVar b = state $ \st ->
+  let Env ctx union = stEnv st
+  in case Map.lookup b ctx of
+    Nothing -> (Nothing, st)
+    Just u ->
+      let (mkv, union') = UM.find u union
+      in case mkv of
+        Nothing ->
+          (Nothing, st { stEnv = Env ctx union' })
+        Just (k, v) ->
+          let ctx' = if k == u then ctx else Map.insert b k ctx
+          in (Just v, st { stEnv = Env ctx' union' })
 
 stepFocus :: Exp -> M ()
 stepFocus = \case
@@ -79,6 +109,14 @@ stepFocus = \case
       modifyCtlKont $ \j ->
         let k = ctlRedKont j
         in CtlKontAll k Empty Empty j
+    ExpExists b e -> do
+      bindVar b
+      setFocus (FocusRed e)
+    ExpVar b -> do
+      mv <- lookupVar b
+      case mv of
+        Nothing -> throwError (ErrUndeclared b)
+        Just v -> setFocus (FocusRet (RetValPure v))
     _ -> todo "more focus cases"
 
 stepRet :: RetVal -> M ()

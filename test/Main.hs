@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Main (main) where
 
 import qualified Data.Sequence as Seq
@@ -41,6 +43,12 @@ testCases = testCase "cases" $ do
   -- All alternatives
   let caseAll = ExpAll caseAlt
   evalExp caseAll @?= Right (RetValPure valTup)
+
+  -- Exists var
+  let caseExistsVar = ExpExists "x" (ExpVar "x")
+  case evalExp caseExistsVar of
+    Right (RetValPure (ValVar _)) -> pure ()
+    other -> fail ("exists var failed: " ++ show other)
 
 main :: IO ()
 main = defaultMain (testGroup "Lyric" [testCases])
