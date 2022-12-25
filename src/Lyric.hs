@@ -3,9 +3,13 @@ module Lyric where
 import Control.Monad.Except (ExceptT, MonadError (..), runExceptT)
 import Control.Monad.Reader (MonadReader (..), ReaderT (..))
 import Control.Monad.State.Strict (MonadState (..), State, gets, modify', runState)
+import Data.Foldable (toList)
+import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
+import Data.Set (Set)
+import Data.Traversable (for)
 import Lyric.Core (Alt (..), CtlKont (..), Ctx, Env (..), Err (..), Exp (..), Focus (..), Fun (..), MergeErr (..),
                    Op (..), RedKont (..), RetVal (..), St (..), TmUniq (..), TmVar, Trail (..), TrailErr (..), Union,
                    Val (..), ctlAddAlt, ctlRedKont, matchFun, stUnionL)
@@ -75,6 +79,15 @@ lookupVar b = state $ \st ->
           let ctx' = if k == u then ctx else Map.insert b k ctx
           in (Just v, st { stEnv = Env ctx' union' })
 
+closeVars :: Set TmVar -> M (Map TmVar TmUniq)
+closeVars bs = do
+  ctx <- gets (envCtx . stEnv)
+  entries <- for (toList bs) $ \b ->
+    case Map.lookup b ctx of
+      Nothing -> throwError (ErrUndeclared b)
+      Just u -> pure (b, u)
+  pure (Map.fromList entries)
+
 stepFocus :: Exp -> M ()
 stepFocus = \case
     ExpFail ->
@@ -117,7 +130,10 @@ stepFocus = \case
       case mv of
         Nothing -> throwError (ErrUndeclared b)
         Just v -> setFocus (FocusRet (RetValPure v))
-    ExpLam _b _e -> todo "lam case"
+    ExpLam bs b e -> do
+      m <- closeVars bs
+      let v = ValLam m b e
+      setFocus (FocusRet (RetValPure v))
     _ -> todo "more focus cases"
 
 stepRet :: RetVal -> M ()
@@ -268,17 +284,3 @@ mergeUniq a b = do
     MergeResMissing x -> throwError (ErrMissing x)
     MergeResUnchanged x -> pure x
     MergeResChanged x _ -> pure x
-
-expApp :: Exp -> [Exp] -> Exp
-expApp a = \case
-  [] -> a
-  b:bs -> expApp (ExpApp a b) bs
-
-expAlts :: [Exp] -> Exp
-expAlts = \case
-  [] -> ExpFail
-  [b] -> b
-  b:bs -> ExpAlt b (expAlts bs)
-
-expTup :: [Exp] -> Exp
-expTup = ExpTup . Seq.fromList

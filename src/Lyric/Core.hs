@@ -42,7 +42,7 @@ opArity = const 2
 data Exp =
     ExpVar !TmVar
   | ExpTup !(Seq Exp)
-  | ExpLam !TmVar !Exp -- TODO
+  | ExpLam !(Set TmVar) !TmVar !Exp -- TODO
   | ExpInt !Int
   | ExpOp !Op
   | ExpApp Exp Exp
@@ -66,14 +66,15 @@ type F a = ReaderT (Set TmVar) (Writer (Set TmVar)) a
 execF :: F () -> Set TmVar -> Set TmVar
 execF f r = execWriter (runReaderT f r)
 
-expFree :: Exp -> Set TmVar
-expFree = flip execF Set.empty . cata go where
+expFree :: Bool -> Exp -> Set TmVar
+expFree useCached = flip execF Set.empty . cata go where
   go = \case
     ExpVarF b -> do
       bs <- ask
       unless (Set.member b bs) (tell (Set.singleton b))
     ExpTupF xs -> sequence_ xs
-    ExpLamF b x -> local (Set.insert b) x
+    ExpLamF bs b x ->
+      if useCached then tell bs else local (Set.insert b) x
     ExpIntF _ -> pure ()
     ExpOpF _ -> pure ()
     ExpAppF x y -> x >> y
@@ -230,3 +231,20 @@ stUnionL = stEnvL . envUnionL
 
 initSt :: Exp -> St
 initSt e = St 0 (FocusRed e) initEnv CtlKontTop
+
+expApp :: Exp -> [Exp] -> Exp
+expApp a = \case
+  [] -> a
+  b:bs -> expApp (ExpApp a b) bs
+
+expAlts :: [Exp] -> Exp
+expAlts = \case
+  [] -> ExpFail
+  [b] -> b
+  b:bs -> ExpAlt b (expAlts bs)
+
+expTup :: [Exp] -> Exp
+expTup = ExpTup . Seq.fromList
+
+expLam :: TmVar -> Exp -> Exp
+expLam b e = ExpLam (Set.delete b (expFree True e)) b e

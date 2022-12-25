@@ -2,9 +2,11 @@
 
 module Main (main) where
 
+import qualified Data.Map.Strict as Map
+import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
-import Lyric (expAlts, expApp, expTup, multiStep, runM)
-import Lyric.Core (Err, Exp (..), Op (..), RetVal (..), St, Val (..), initSt)
+import Lyric (multiStep, runM)
+import Lyric.Core (Err, Exp (..), Op (..), RetVal (..), St, Val (..), expAlts, expApp, expLam, expTup, initSt)
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (testCase, (@?=))
 
@@ -16,39 +18,48 @@ evalExp ex =
     Right rv -> Right rv
 
 testCases :: TestTree
-testCases = testCase "cases" $ do
+testCases =
   let valOne = ValInt 1
-  let valTup = ValTup (Seq.fromList [ValInt 1, ValInt 2])
-
-  -- Primitive op
-  let caseAdd = expApp (ExpOp OpAdd) [ExpInt 1, ExpInt 2]
-  evalExp caseAdd @?= Right (RetValPure (ValInt 3))
-
-  -- Alternative (succeeding) - implicit one
-  let caseAlt = expAlts [ExpFail, ExpInt 1, ExpInt 2]
-  evalExp caseAlt @?= Right (RetValPure valOne)
-
-  -- Tuple
-  let caseTup = expTup [ExpInt 1, ExpInt 2]
-  evalExp caseTup @?= Right (RetValPure valTup)
-
-  -- Fail
-  let caseFail = ExpFail
-  evalExp caseFail @?= Right RetValFail
-
-  -- Alternative (succeeding) - explicit one
-  let caseOne = ExpOne caseAlt
-  evalExp caseOne @?= Right (RetValPure valOne)
-
-  -- All alternatives
-  let caseAll = ExpAll caseAlt
-  evalExp caseAll @?= Right (RetValPure valTup)
-
-  -- Exists var
-  let caseExistsVar = ExpExists "x" (ExpVar "x")
-  case evalExp caseExistsVar of
-    Right (RetValPure (ValVar _)) -> pure ()
-    other -> fail ("exists var failed: " ++ show other)
+      valTup = ValTup (Seq.fromList [ValInt 1, ValInt 2])
+      caseAlt = expAlts [ExpFail, ExpInt 1, ExpInt 2]
+  in testGroup "cases"
+    [ testCase "val op" $ do
+      let e = ExpOp OpAdd
+      evalExp e @?= Right (RetValPure (ValOp OpAdd Empty))
+    , testCase "val int" $ do
+      let e = ExpInt 1
+      evalExp e @?= Right (RetValPure valOne)
+    , testCase "val lam" $ do
+      let e = expLam "x" (ExpVar "x")
+      evalExp e @?= Right (RetValPure (ValLam Map.empty "x" (ExpVar "x")))
+    , testCase "red op" $ do
+      let e = expApp (ExpOp OpAdd) [ExpInt 1, ExpInt 2]
+      evalExp e @?= Right (RetValPure (ValInt 3))
+    , testCase "alt implicit" $ do
+      let e = caseAlt
+      evalExp e @?= Right (RetValPure valOne)
+    , testCase "tuple" $ do
+      let e = expTup [ExpInt 1, ExpInt 2]
+      evalExp e @?= Right (RetValPure valTup)
+    , testCase "fail" $ do
+      let e = ExpFail
+      evalExp e @?= Right RetValFail
+    , testCase "alt explicit" $ do
+      let e = ExpOne caseAlt
+      evalExp e @?= Right (RetValPure valOne)
+    , testCase "all" $ do
+      let e = ExpAll caseAlt
+      evalExp e @?= Right (RetValPure valTup)
+    , testCase "exists var" $ do
+      let e = ExpExists "x" (ExpVar "x")
+      evalExp e @?= Right (RetValPure (ValVar 0))
+    , testCase "exists lam free" $ do
+      let e = ExpExists "y" (expLam "x" (ExpVar "y"))
+      evalExp e @?= Right (RetValPure (ValLam (Map.singleton "y" 0) "x" (ExpVar "y")))
+    -- , testCase "lam app" $ do
+    --   let e = expApp (expLam "x" (ExpVar "x")) [ExpInt 1]
+    --   evalExp e @?= Right (RetValPure valOne)
+    ]
 
 main :: IO ()
 main = defaultMain (testGroup "Lyric" [testCases])
