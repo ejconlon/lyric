@@ -134,6 +134,9 @@ stepFocus = \case
       m <- closeVars bs
       let v = ValLam m b e
       setFocus (FocusRet (RetValPure v))
+    -- ExpSeq {} -> _
+    -- ExpUnify {} -> _
+    -- ExpLet {} -> _
     _ -> todo "more focus cases"
 
 stepRet :: RetVal -> M ()
@@ -145,7 +148,6 @@ stepRet rv = do
       let redKont = ctlRedKont ctlKont
       case redKont of
         RedKontTop -> setFocus (FocusCtl rv)
-        RedKontAlt {} -> todo "ret alt"
         RedKontAppFirst e k ->
           case matchFun v of
             Just f -> do

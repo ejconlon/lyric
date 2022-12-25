@@ -170,7 +170,6 @@ initEnv = Env initCtx initUnion
 
 data RedKont =
     RedKontTop
-  | RedKontAlt !Env !Exp RedKont
   | RedKontAppFirst !Exp RedKont
   | RedKontAppSecond !Fun RedKont
   | RedKontTup !(Seq Val) !(Seq Exp) RedKont
